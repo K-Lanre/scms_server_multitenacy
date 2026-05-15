@@ -202,12 +202,10 @@ exports.getInstitutionsSummary = catchAsync(async (req, res, next) => {
 
             return {
                 ...inst.toJSON(),
-                stats: {
-                    totalUsers: userCount,
-                    members: memberCount,
-                    totalBalance,
-                    loans: loanCount
-                }
+                memberCount: memberCount,
+                totalUsers: userCount,
+                totalBalance,
+                loanCount
             };
         })
     );

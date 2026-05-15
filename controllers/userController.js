@@ -147,10 +147,10 @@ exports.submitOnboarding = catchAsync(async (req, res, next) => {
     updatedUser.bankName = req.body.bankName;
     updatedUser.bankCode = req.body.bankCode;
     updatedUser.accountNumber = req.body.accountNumber;
-    
+
     if (req.files?.idImage) updatedUser.idImage = req.files.idImage[0].filename;
     if (req.files?.profilePicture) updatedUser.profilePicture = req.files.profilePicture[0].filename;
-    
+
     updatedUser.status = 'pending_approval';
 
     await updatedUser.save({ validate: false });
@@ -160,7 +160,7 @@ exports.submitOnboarding = catchAsync(async (req, res, next) => {
         const { Op } = require('sequelize');
         const socketIO = require('../utils/socket');
         const { sendNotification } = require('../utils/notificationService');
-        
+
         // Find admins for this institution
         const admins = await User.findAll({
             where: {
@@ -307,7 +307,7 @@ exports.approveMember = catchAsync(async (req, res, next) => {
     }
 
     await user.save();
-    
+
     logAction(req, 'MEMBER_APPROVED', { userId: user.id, name: user.name });
 
     // ─── NOTIFICATION & EMAIL ───
@@ -315,10 +315,10 @@ exports.approveMember = catchAsync(async (req, res, next) => {
         const { Institution } = require('../models');
         const Email = require('../utils/email');
         const institution = await Institution.findByPk(user.institutionId);
-        
+
         // Send tailored approval email
         await new Email(user, process.env.FRONTEND_URL, institution).sendMembershipApproval();
-        
+
         // Send in-app notification
         const { sendNotification } = require('../utils/notificationService');
         await sendNotification({
@@ -438,12 +438,12 @@ exports.rejectMember = catchAsync(async (req, res, next) => {
         const { Institution } = require('../models');
         const Email = require('../utils/email');
         const { sendNotification } = require('../utils/notificationService');
-        
+
         const institution = await Institution.findByPk(user.institutionId);
-        
+
         // Send tailored rejection email
         await new Email(user, process.env.FRONTEND_URL, institution).sendApplicationRejected(reason);
-        
+
         // Send in-app notification
         await sendNotification({
             userId: user.id,
@@ -540,9 +540,9 @@ exports.adminUpdateUser = catchAsync(async (req, res, next) => {
 
     await user.save({ validate: false });
 
-    logAction(req, 'USER_ADMIN_UPDATE', { 
-        targetUserId: user.id, 
-        updates: { role, status, name } 
+    logAction(req, 'USER_ADMIN_UPDATE', {
+        targetUserId: user.id,
+        updates: { role, status, name }
     });
 
     res.status(200).json({
@@ -591,10 +591,10 @@ exports.adminCreateUser = catchAsync(async (req, res, next) => {
     // Remove password from output
     newUser.password = undefined;
 
-    logAction(req, 'USER_ADMIN_CREATE', { 
-        targetUserId: newUser.id, 
+    logAction(req, 'USER_ADMIN_CREATE', {
+        targetUserId: newUser.id,
         role: newUser.role,
-        email: newUser.email 
+        email: newUser.email
     });
 
     // Automatically generate Main and Savings accounts for all users created by admins
