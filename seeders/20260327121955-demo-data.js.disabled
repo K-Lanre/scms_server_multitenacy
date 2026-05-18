@@ -1,0 +1,464 @@
+'use strict';
+const { User, SystemSetting, SavingsProduct, Account, Transaction, Loan, LoanGuarantor, UserSavingsPlan } = require('../models');
+
+/** @type {import('sequelize-cli').Migration} */
+module.exports = {
+  async up (queryInterface, Sequelize) {
+    console.log('🌱 Starting Cooperative Database Seeding...');
+
+    // ---------------------------------------------------------
+    // 1. SYSTEM SETTINGS
+    // ---------------------------------------------------------
+    console.log('⚙️  Seeding System Settings...');
+    const settingsSchema = [
+      { key: 'monthlyThriftAmount', value: '10000', type: 'number', description: 'Default monthly thrift contribution' },
+      { key: 'lateThriftPenalty', value: '500', type: 'number', description: 'Penalty for late thrift payment' },
+      { key: 'deductionDay', value: '27', type: 'number', description: 'Day of month for automatic deductions' },
+      { key: 'medicalWelfareCap', value: '50000', type: 'number', description: 'Maximum medical welfare grant' },
+      { key: 'funeralWelfareCap', value: '100000', type: 'number', description: 'Maximum funeral welfare grant' },
+      { key: 'allowLoanApplications', value: 'true', type: 'boolean', description: 'Enable or disable new loan applications' },
+      { key: 'allowWithdrawals', value: 'true', type: 'boolean', description: 'Enable or disable savings withdrawals' }
+    ];
+
+    for (const setting of settingsSchema) {
+      await SystemSetting.findOrCreate({
+        where: { key: setting.key },
+        defaults: setting
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 2. SAVINGS PRODUCTS
+    // ---------------------------------------------------------
+    console.log('🏦 Seeding Savings Products...');
+    const [generalSavings, createdGeneral] = await SavingsProduct.findOrCreate({
+      where: { name: 'General Savings' },
+      defaults: {
+        description: 'Mandatory cooperative savings account',
+        type: 'safebox',
+        category: 'none',
+        interestRate: 5.5,
+        minDeposit: 1000,
+        minDuration: 30,
+        penaltyPercentage: 2.0,
+        allowEarlyWithdrawal: true,
+        status: 'active'
+      }
+    });
+
+    const [shareCapital, createdShare] = await SavingsProduct.findOrCreate({
+      where: { name: 'Share Capital' },
+      defaults: {
+        description: 'Mandatory shareholding account for dividends',
+        type: 'fixed',
+        category: 'none',
+        interestRate: 0,
+        minDeposit: 5000,
+        minDuration: 365,
+        penaltyPercentage: 0,
+        allowEarlyWithdrawal: false,
+        status: 'active'
+      }
+    });
+
+    // ---------------------------------------------------------
+    // 3. USERS (Admin & Staff)
+    // ---------------------------------------------------------
+    console.log('👤 Seeding Administrators...');
+
+    // Super Admin
+    const existingAdmin = await User.findOne({ where: { email: 'admin@coop.com' } });
+    let superAdmin;
+    if (!existingAdmin) {
+      superAdmin = await User.create({
+        name: 'Chief Admin',
+        email: 'admin@coop.com',
+        phoneNumber: '08000000001',
+        password: 'Password123!',
+        passwordConfirm: 'Password123!',
+        role: 'super_admin',
+        status: 'active',
+        idType: 'national_id',
+        idNumber: 'SA1000001',
+        dateOfBirth: '1980-01-01',
+        gender: 'male',
+        maritalStatus: 'married',
+        membershipType: 'REGULAR',
+        isEmailVerified: true
+      });
+      console.log('✅ Created Super Admin: admin@coop.com');
+    } else {
+      superAdmin = existingAdmin;
+      console.log('⏭️  Super Admin already exists');
+    }
+
+    // Staff Member
+    const existingStaff = await User.findOne({ where: { email: 'staff@coop.com' } });
+    if (!existingStaff) {
+      await User.create({
+        name: 'Office Secretary',
+        email: 'staff@coop.com',
+        phoneNumber: '08000000002',
+        password: 'Password123!',
+        passwordConfirm: 'Password123!',
+        role: 'staff',
+        status: 'active',
+        idType: 'national_id',
+        idNumber: 'STF2000001',
+        dateOfBirth: '1985-05-15',
+        gender: 'female',
+        maritalStatus: 'single',
+        membershipType: 'REGULAR',
+        isEmailVerified: true
+      });
+      console.log('✅ Created Staff Member: staff@coop.com');
+    } else {
+      console.log('⏭️  Staff Member already exists');
+    }
+
+    console.log('--------------------------------------------------');
+    console.log('🎉 Phase 1 Seeding Complete (Settings, Products, Admins)');
+    console.log('--------------------------------------------------');
+
+    // ---------------------------------------------------------
+    // 4. MEMBERS & FINANCIALS
+    // ---------------------------------------------------------
+    console.log('👥 Seeding Members & Initializing Balances...');
+    const memberData = [
+      { name: 'John Doe', email: 'johndoe@example.com', phone: '08100000001', id: 'MEM1000001' },
+      { name: 'Jane Smith', email: 'janesmith@example.com', phone: '08100000002', id: 'MEM1000002' },
+      { name: 'Michael Johnson', email: 'mjohnson@example.com', phone: '08100000003', id: 'MEM1000003' }
+    ];
+
+    const seededMembers = [];
+
+    for (const data of memberData) {
+      const existing = await User.findOne({ where: { email: data.email } });
+      let member;
+      if (!existing) {
+        member = await User.create({
+          name: data.name,
+          email: data.email,
+          phoneNumber: data.phone,
+          password: 'Password123!',
+          passwordConfirm: 'Password123!',
+          role: 'member',
+          status: 'active',
+          idType: 'national_id',
+          idNumber: data.id,
+          dateOfBirth: '1990-01-01',
+          gender: 'male',
+          maritalStatus: 'single',
+          membershipType: 'REGULAR',
+          isEmailVerified: true
+        });
+        console.log(`✅ Created Member: ${data.email}`);
+      } else {
+        member = existing;
+        console.log(`⏭️  Member already exists: ${data.email}`);
+      }
+      seededMembers.push(member);
+    }
+
+    console.log('💰 Validating default accounts & injecting funds...');
+    
+    // Fetch the admin to act as the 'performedBy' identity for system transactions
+    const adminUser = await User.findOne({ where: { email: 'admin@coop.com' } });
+    
+    for (const user of seededMembers) {
+      // 1. Ensure accounts exist (Usually created by User hooks or Controllers, but we handle it manually here just in case)
+      const [savingsAcc] = await Account.findOrCreate({
+        where: { userId: user.id, accountType: 'savings' },
+        defaults: {
+          accountNumber: 'SAV' + Date.now() + Math.floor(Math.random() * 1000),
+          balance: 0,
+          status: 'active'
+        }
+      });
+
+      const [sharesAcc] = await Account.findOrCreate({
+        where: { userId: user.id, accountType: 'share_capital' },
+        defaults: {
+          accountNumber: 'SHR' + Date.now() + Math.floor(Math.random() * 1000),
+          balance: 0,
+          status: 'active'
+        }
+      });
+
+      // 2. Fund Accounts
+      if (Number(savingsAcc.balance) === 0) {
+        await Transaction.create({
+          accountId: savingsAcc.id,
+          transactionType: 'deposit',
+          amount: 50000,
+          balanceAfter: 50000,
+          reference: 'SYS-DEP-SAV-' + Date.now() + Math.floor(Math.random() * 1000),
+          status: 'completed',
+          description: 'Initial System Deposit',
+          performedBy: adminUser.id
+        });
+        await savingsAcc.update({ balance: 50000 });
+        console.log(`   💵 Funded Savings for ${user.email} with ₦50,000`);
+      }
+
+      if (Number(sharesAcc.balance) === 0) {
+        await Transaction.create({
+          accountId: sharesAcc.id,
+          transactionType: 'share_purchase',
+          amount: 25000,
+          balanceAfter: 25000,
+          reference: 'SYS-DEP-SHR-' + Date.now() + Math.floor(Math.random() * 1000),
+          status: 'completed',
+          description: 'Initial Share Purchase',
+          performedBy: adminUser.id
+        });
+        await sharesAcc.update({ balance: 25000 });
+        console.log(`   📈 Funded Shares for ${user.email} with ₦25,000`);
+      }
+    }
+
+    console.log('--------------------------------------------------');
+    console.log('🎉 Phase 2 Seeding Complete (Members, Accounts, Transactions)');
+    console.log('--------------------------------------------------');
+
+    // ---------------------------------------------------------
+    // 5. LOANS & SAVINGS PLANS
+    // ---------------------------------------------------------
+    console.log('💸 Seeding Loans & Savings Plans...');
+    
+    // 1. Create a Goal-Based Savings Product for testing
+    const [targetProduct] = await SavingsProduct.findOrCreate({
+      where: { name: 'Eid Festival Target' },
+      defaults: {
+        description: 'Save strictly towards Eid celebrations',
+        type: 'target',
+        category: 'festive',
+        interestRate: 6.5,
+        minDeposit: 2000,
+        minDuration: 60,
+        penaltyPercentage: 5.0,
+        allowEarlyWithdrawal: true,
+        status: 'active'
+      }
+    });
+
+    if (seededMembers.length >= 3) {
+      const borrower = seededMembers[0];
+      const guarantor1 = seededMembers[1];
+      const guarantor2 = seededMembers[2];
+
+      // Create an Active Loan for Member 1
+      const loanAmount = 200000;
+      const interestRate = 10;
+      const duration = 6;
+      const totalRepayable = loanAmount + (loanAmount * (interestRate / 100)); // 220000
+      const monthlyPayment = totalRepayable / duration;
+
+      console.log(`   📝 Applying Loan for ${borrower.email} (₦${loanAmount})`);
+      const loan = await Loan.create({
+        userId: borrower.id,
+        loanAmount: loanAmount,
+        interestRate: interestRate,
+        duration: duration,
+        monthlyPayment: monthlyPayment,
+        totalRepayable: totalRepayable,
+        outstandingBalance: totalRepayable,
+        status: 'disbursed',
+        approvedBy: adminUser.id,
+        disbursedAt: new Date(Date.now() - (30 * 24 * 60 * 60 * 1000)), // 30 days ago
+        repaymentMode: 'automated',
+        monthlyDeductionAmount: monthlyPayment,
+        dueDate: new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)), // next month
+        originalDueDate: new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)),
+        failedDeductionCount: 0,
+        extensionCount: 0
+      });
+
+      // Link Guarantors
+      await LoanGuarantor.bulkCreate([
+        { loanId: loan.id, guarantorUserId: guarantor1.id, status: 'accepted' },
+        { loanId: loan.id, guarantorUserId: guarantor2.id, status: 'accepted' }
+      ]);
+      console.log(`   🤝 Attached Guarantors: ${guarantor1.name}, ${guarantor2.name}`);
+
+      // Create a Savings Plan for Member 2
+      console.log(`   🎯 Creating Target Plan for ${guarantor1.email}`);
+      const planAccount = await Account.create({
+        userId: guarantor1.id,
+        accountNumber: 'TRG' + Date.now(),
+        accountType: 'savings_plan',
+        balance: 10000,
+        status: 'active'
+      });
+
+      await UserSavingsPlan.create({
+        userId: guarantor1.id,
+        productId: targetProduct.id,
+        accountId: planAccount.id,
+        planName: 'Holiday Fund 2026',
+        targetAmount: 150000,
+        duration: 90,
+        startDate: new Date(),
+        maturityDate: new Date(Date.now() + (90 * 24 * 60 * 60 * 1000)),
+        autoSaveAmount: 5000,
+        frequency: 'weekly',
+        status: 'active'
+      });
+      // Fund the underlying plan account slightly
+      await Transaction.create({
+        accountId: planAccount.id,
+        transactionType: 'deposit',
+        amount: 10000,
+        balanceAfter: 10000,
+        reference: 'SYS-TRG-' + Date.now(),
+        status: 'completed',
+        description: 'Auto Save Deposit',
+        performedBy: adminUser.id
+      });
+      console.log(`   🏦 Funded Target Plan with initial ₦10,000`);
+    }
+
+    console.log('--------------------------------------------------');
+    console.log('🎉 Phase 3 Seeding Complete (Loans, Guarantors, Plans)');
+    console.log('--------------------------------------------------');
+
+    // ---------------------------------------------------------
+    // 6. CONTRIBUTIONS, LEVIES & DIVIDENDS
+    // ---------------------------------------------------------
+    console.log('🏦 Seeding Community Finances (Contributions, Levies, Dividends)...');
+    const { Contribution, Levy, DividendRun } = require('../models');
+
+    if (seededMembers.length >= 3) {
+      const targetMember = seededMembers[2]; // Michael Johnson
+
+      // 1. Contribution (Pending Thrift)
+      console.log(`   📅 Billed Monthly Thrift Contribution for ${targetMember.email}`);
+      const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+      await Contribution.create({
+        userId: targetMember.id,
+        month: currentMonth,
+        amount: 10000,
+        status: 'pending'
+      });
+
+      // 2. Levy (Late Meeting Fine)
+      console.log(`   ⚖️ Issued Late Meeting Levy for ${targetMember.email}`);
+      await Levy.create({
+        userId: targetMember.id,
+        name: 'Late Meeting Fine (March)',
+        amount: 500,
+        status: 'pending',
+        dueDate: new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)) // 7 days from now
+      });
+    }
+
+    // 3. Dividend Run (Historical)
+    console.log(`   💸 Generating Historical Dividend Run (2025)...`);
+    await DividendRun.create({
+      year: 2025,
+      totalSurplus: 1500000, // 1.5M profit
+      totalShares: 5000000, // 5M total shares
+      dividendPerShare: 0.3, // 30k div
+      totalDistributed: 1500000,
+      memberCount: 50,
+      status: 'completed',
+      performedBy: adminUser.id
+    });
+
+    console.log('--------------------------------------------------');
+    console.log('🎉 Phase 4 Seeding Complete (Contributions, Levies, Dividends)');
+    console.log('--------------------------------------------------');
+
+    // ---------------------------------------------------------
+    // 7. MEETINGS & DONATIONS
+    // ---------------------------------------------------------
+    console.log('🤝 Seeding Governance & Welfare (Meetings, Donations)...');
+    const { Meeting, MeetingMinute, DonationRequest, Donation } = require('../models');
+
+    // 1. Meeting & Minutes
+    console.log(`   📝 Scheduling and recording a Cooperative Meeting`);
+    const meeting = await Meeting.create({
+      title: 'Emergency Executive Review',
+      description: 'Review of emergency welfare fund allocations for Q1',
+      type: 'emergency',
+      date: new Date().toISOString().slice(0, 10),
+      time: '14:00',
+      location: 'Virtual Zoom Room 1',
+      status: 'completed'
+    });
+
+    await MeetingMinute.create({
+      meetingId: meeting.id,
+      content: 'The committee met to discuss the rapid depletion of the emergency fund. It was unanimously agreed to introduce a temporary ₦500 levy to replenish the reserve. Adjourned at 15:30.',
+      attendanceCount: 12,
+      recordedBy: adminUser.id
+    });
+
+    if (seededMembers.length >= 2) {
+      const beneficiary = seededMembers[0];
+      const donor = seededMembers[1];
+
+      // 2. Donation Request & Donation
+      console.log(`   💖 Initiating Crowdfunding Request for ${beneficiary.email}`);
+      const donReq = await DonationRequest.create({
+        userId: beneficiary.id,
+        title: 'Support for Medical Surgery',
+        description: 'Raising funds to support our brother through his upcoming medical procedure.',
+        targetAmount: 500000,
+        currentAmount: 5000,
+        status: 'active',
+        endDate: new Date(Date.now() + (14 * 24 * 60 * 60 * 1000)) // 14 days
+      });
+
+      // Mock Transaction for Donation
+      const donationTx = await Transaction.create({
+        accountId: 1, // Fallback, not strictly required for fake donation test if schema allows
+        transactionType: 'transfer_out',
+        amount: 5000,
+        balanceAfter: 45000, // Assuming Savings balance is reduced from 50k
+        reference: 'SYS-DON-' + Date.now(),
+        status: 'completed',
+        description: 'Voluntary Donation',
+        performedBy: donor.id
+      });
+
+      await Donation.create({
+        requestId: donReq.id,
+        donorId: donor.id,
+        amount: 5000,
+        transactionId: donationTx.id
+      });
+      console.log(`   💝 Seeded ₦5,000 external donation from ${donor.email}`);
+    }
+
+    console.log('--------------------------------------------------');
+    console.log('🎉 Phase 5 Seeding Complete (Meetings, Donations)');
+    console.log('🚀 DATABASE SEEDING FINISHED SUCCESSFULLY! 🚀');
+    console.log('--------------------------------------------------');
+  },
+
+  async down (queryInterface, Sequelize) {
+    // Teardown for Phase 5
+    await queryInterface.bulkDelete('Donations', null, {});
+    await queryInterface.bulkDelete('DonationRequests', null, {});
+    await queryInterface.bulkDelete('MeetingMinutes', null, {});
+    await queryInterface.bulkDelete('Meetings', null, {});
+    
+    // Teardown for Phase 4
+    await queryInterface.bulkDelete('Contributions', null, {});
+    await queryInterface.bulkDelete('Levies', null, {});
+    await queryInterface.bulkDelete('DividendRuns', null, {});
+    
+    // Teardown for Phase 3
+    await queryInterface.bulkDelete('LoanGuarantors', null, {});
+    await queryInterface.bulkDelete('Loans', null, {});
+    await queryInterface.bulkDelete('UserSavingsPlans', null, {});
+    
+    // We add the teardown for Members and Transactions corresponding to Phase 2
+    await queryInterface.bulkDelete('Transactions', { description: ['Initial System Deposit', 'Initial Share Purchase'] }, {});
+    await queryInterface.bulkDelete('Users', { email: ['johndoe@example.com', 'janesmith@example.com', 'mjohnson@example.com'] }, {});
+    await queryInterface.bulkDelete('Users', { email: ['admin@coop.com', 'staff@coop.com'] }, {});
+    await queryInterface.bulkDelete('SavingsProducts', { name: ['General Savings', 'Share Capital'] }, {});
+    await queryInterface.bulkDelete('SystemSettings', null, {});
+  }
+};
