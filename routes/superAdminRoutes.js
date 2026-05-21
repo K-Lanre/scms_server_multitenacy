@@ -9,6 +9,7 @@ router.use(protect);
 router.use(restrictTo('super_admin'));
 
 router.get('/stats', superAdminController.getSystemStats);
+router.get('/reports/summary', superAdminController.getPlatformReportSummary);
 router.get('/recent-activity', superAdminController.getRecentActivity);
 router.get('/institutions-summary', superAdminController.getInstitutionsSummary);
 router.get('/institutions/:id', superAdminController.getInstitutionDetail);
