@@ -17,13 +17,13 @@ module.exports = {
       
       // Get all members (role = 'member') with their institution
       const [users] = await queryInterface.sequelize.query(
-        `SELECT id, institutionId, email, role FROM Users WHERE role = 'member' ORDER BY id`,
+        `SELECT id, "institutionId", email, role FROM "Users" WHERE role = 'member' ORDER BY id`,
         { transaction }
       );
       
       // Get savings products for creating savings plan accounts
       const [savingsProducts] = await queryInterface.sequelize.query(
-        `SELECT id, institutionId, type FROM SavingsProducts WHERE type IN ('target', 'safebox')`,
+        `SELECT id, "institutionId", type FROM "SavingsProducts" WHERE type IN ('target', 'safebox')`,
         { transaction }
       );
       
@@ -123,3 +123,4 @@ module.exports = {
     await queryInterface.bulkDelete('Accounts', null, {});
   }
 };
+

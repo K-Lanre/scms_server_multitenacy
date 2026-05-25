@@ -28,17 +28,17 @@ module.exports = {
     await addColumnSafely('JobConfigs', 'institutionId', columnOptions);
     await addColumnSafely('LoanRepayments', 'institutionId', columnOptions);
     await addColumnSafely('SystemSettings', 'institutionId', columnOptions);
-    
+
     // Backfill: Many existing records might already belong to the first institution (COOP001)
     // We can handle this in a separate seed or logic, but for now we keep them NULL or set to 1
     // if institution 1 exists.
-    
-    const [institutions] = await queryInterface.sequelize.query('SELECT id FROM Institutions LIMIT 1;');
+
+    const [institutions] = await queryInterface.sequelize.query('SELECT id FROM "Institutions" LIMIT 1;');
     if (institutions.length > 0) {
       const firstId = institutions[0].id;
       const tables = ['WithdrawalRequests', 'UserSavingsPlans', 'Notifications', 'JobConfigs', 'LoanRepayments', 'SystemSettings'];
       for (const table of tables) {
-        await queryInterface.sequelize.query(`UPDATE ${table} SET institutionId = ${firstId} WHERE institutionId IS NULL;`);
+        await queryInterface.sequelize.query(`UPDATE "${table}" SET "institutionId" = ${firstId} WHERE "institutionId" IS NULL;`);
       }
     }
   },

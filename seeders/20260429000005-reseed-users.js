@@ -10,6 +10,44 @@ module.exports = {
     
     try {
       console.log('👤 Seeding Users...');
+
+      const dependentTables = [
+        'AuditLogs',
+        'Notifications',
+        'WithdrawalRequests',
+        'MeetingMinutes',
+        'Meetings',
+        'Contributions',
+        'LoanRepayments',
+        'LoanGuarantors',
+        'Loans',
+        'UserSavingsPlans',
+        'Transactions',
+        'Accounts',
+        'PostingLogs',
+        'DividendRuns',
+        'Levies',
+        'WelfareApplications',
+        'Donations',
+        'DonationRequests'
+      ];
+
+      const existingTables = await queryInterface.showAllTables({ transaction });
+      const existingTableNames = existingTables.map((table) => (
+        typeof table === 'string' ? table : table.tableName
+      ));
+      const tablesToTruncate = dependentTables.filter((table) => existingTableNames.includes(table));
+
+      if (tablesToTruncate.length > 0) {
+        const quotedTables = tablesToTruncate
+          .map((table) => queryInterface.queryGenerator.quoteTable(table))
+          .join(', ');
+
+        await queryInterface.sequelize.query(
+          `TRUNCATE TABLE ${quotedTables} RESTART IDENTITY CASCADE`,
+          { transaction }
+        );
+      }
       
       // Clear existing users (except we want fresh start)
       await queryInterface.bulkDelete('Users', null, { transaction });
@@ -19,7 +57,7 @@ module.exports = {
       
       // Get institution IDs
       const [institutions] = await queryInterface.sequelize.query(
-        'SELECT id, code FROM Institutions WHERE code IN ("COOP001", "UTS002", "MCU003")',
+        `SELECT id, code FROM "Institutions" WHERE code IN ('COOP001', 'UTS002', 'MCU003')`,
         { transaction }
       );
       
@@ -383,3 +421,4 @@ module.exports = {
     await queryInterface.bulkDelete('Users', null, {});
   }
 };
+

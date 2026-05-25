@@ -5,9 +5,9 @@ module.exports = {
     // Backfill completedAt for existing completed loans
     // Use lastDeductionDate if available, otherwise use updatedAt
     await queryInterface.sequelize.query(`
-      UPDATE Loans 
-      SET completedAt = COALESCE(lastDeductionDate, updatedAt)
-      WHERE status = 'completed' AND completedAt IS NULL
+      UPDATE "Loans" 
+      SET "completedAt" = COALESCE("lastDeductionDate", "updatedAt")
+      WHERE "status" = 'completed' AND "completedAt" IS NULL
     `);
   },
 

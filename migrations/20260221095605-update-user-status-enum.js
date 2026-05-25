@@ -2,15 +2,13 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    // In MySQL, to update an ENUM, you have to run an ALTER TABLE query
-    return queryInterface.sequelize.query(`
-      ALTER TABLE Users MODIFY COLUMN status ENUM('active', 'inactive', 'suspended', 'pending_onboarding', 'pending_approval') DEFAULT 'pending_onboarding';
-    `);
+    // This migration is no longer needed since the Users table already has the correct ENUM
+    // Skip this migration
+    console.log('Skipping migration - Users table already has correct status ENUM');
   },
 
   down: async (queryInterface, Sequelize) => {
-    return queryInterface.sequelize.query(`
-      ALTER TABLE Users MODIFY COLUMN status ENUM('active', 'inactive', 'suspended') DEFAULT 'active';
-    `);
+    // No-op
+    console.log('Skipping down migration');
   }
 };

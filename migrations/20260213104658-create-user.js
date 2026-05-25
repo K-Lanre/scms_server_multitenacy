@@ -23,8 +23,8 @@ module.exports = {
         allowNull: false
       },
       role: {
-        type: Sequelize.ENUM('super_admin', 'staff', 'member'),
-        defaultValue: 'member'
+        type: Sequelize.ENUM('super_admin', 'staff', 'member', 'user'),
+        defaultValue: 'user'
       },
       status: {
         type: Sequelize.ENUM('active', 'inactive', 'suspended'),

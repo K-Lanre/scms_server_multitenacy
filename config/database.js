@@ -13,7 +13,7 @@ const sequelize =
             process.env.DB_PASSWORD,
             {
                 host: process.env.DB_HOST,
-                dialect: "mysql",
+                dialect: "postgres",
                 logging: false,
                 pool: {
                     max: 10,

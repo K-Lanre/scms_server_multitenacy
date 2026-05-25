@@ -16,18 +16,18 @@ module.exports = {
       const now = new Date();
       const transactions = [];
       
-      // Get all accounts with their users
+// Get all accounts with their users
       const [accounts] = await queryInterface.sequelize.query(
-        `SELECT a.id, a.userId, a.institutionId, a.accountType, a.balance, u.email 
-         FROM Accounts a 
-         JOIN Users u ON a.userId = u.id 
+        `SELECT a.id, a."userId", a."institutionId", a."accountType", a.balance, u.email 
+         FROM "Accounts" a 
+         JOIN "Users" u ON a."userId" = u.id 
          ORDER BY a.id`,
         { transaction }
       );
       
       // Get admin users for each institution to be 'performedBy'
       const [admins] = await queryInterface.sequelize.query(
-        `SELECT id, institutionId, role FROM Users 
+        `SELECT id, "institutionId", role FROM "Users" 
          WHERE role IN ('super_admin', 'institution_admin', 'staff') 
          ORDER BY id`,
         { transaction }
@@ -238,3 +238,4 @@ module.exports = {
     await queryInterface.bulkDelete('Transactions', null, {});
   }
 };
+

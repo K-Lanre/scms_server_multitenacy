@@ -16,20 +16,20 @@ module.exports = {
       const now = new Date();
       const savingsPlans = [];
       
-      // Get savings plan accounts with their users
+// Get savings plan accounts with their users
       const [planAccounts] = await queryInterface.sequelize.query(
-        `SELECT a.id as accountId, a.userId, a.institutionId, a.balance, 
+        `SELECT a.id as "accountId", a."userId", a."institutionId", a.balance, 
                 u.email, u.name
-         FROM Accounts a
-         JOIN Users u ON a.userId = u.id
-         WHERE a.accountType = 'savings_plan'
+         FROM "Accounts" a
+         JOIN "Users" u ON a."userId" = u.id
+         WHERE a."accountType" = 'savings_plan'
          ORDER BY a.id`,
         { transaction }
       );
       
       // Get savings products for each institution
       const [savingsProducts] = await queryInterface.sequelize.query(
-        `SELECT id, institutionId, type, name FROM SavingsProducts WHERE type IN ('target', 'safebox')`,
+        `SELECT id, "institutionId", type, name FROM "SavingsProducts" WHERE type IN ('target', 'safebox')`,
         { transaction }
       );
       
@@ -112,3 +112,4 @@ module.exports = {
     await queryInterface.bulkDelete('UserSavingsPlans', null, {});
   }
 };
+

@@ -4,26 +4,26 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     const transaction = await queryInterface.sequelize.transaction();
-    
+
     try {
       console.log('⚙️  Seeding System Settings...');
-      
+
       // Clear existing settings
       await queryInterface.bulkDelete('SystemSettings', null, { transaction });
-      
+
       const now = new Date();
-      
+
       // Get institution IDs (they should be 1, 2, 3 based on insertion order)
       const [institutions] = await queryInterface.sequelize.query(
-        'SELECT id, code FROM Institutions WHERE code IN ("COOP001", "UTS002", "MCU003")',
+        'SELECT id, code FROM "Institutions" WHERE code IN (\'COOP001\', \'UTS002\', \'MCU003\')',
         { transaction }
       );
-      
+
       const institutionMap = {};
       institutions.forEach(inst => {
         institutionMap[inst.code] = inst.id;
       });
-      
+
       // Global settings (no institutionId)
       const globalSettings = [
         {
@@ -54,10 +54,10 @@ module.exports = {
           updatedAt: now
         }
       ];
-      
+
       // Per-institution settings
       const institutionSettings = [];
-      
+
       // COOP001 settings
       if (institutionMap.COOP001) {
         institutionSettings.push(
@@ -94,7 +94,7 @@ module.exports = {
           }
         );
       }
-      
+
       // UTS002 settings
       if (institutionMap.UTS002) {
         institutionSettings.push(
@@ -131,7 +131,7 @@ module.exports = {
           }
         );
       }
-      
+
       // MCU003 settings
       if (institutionMap.MCU003) {
         institutionSettings.push(
@@ -168,13 +168,13 @@ module.exports = {
           }
         );
       }
-      
+
       const allSettings = [...globalSettings, ...institutionSettings];
       await queryInterface.bulkInsert('SystemSettings', allSettings, { transaction });
-      
+
       await transaction.commit();
       console.log(`✅ Created ${allSettings.length} system settings`);
-      
+
     } catch (error) {
       await transaction.rollback();
       console.error('❌ Error seeding system settings:', error);
@@ -187,3 +187,4 @@ module.exports = {
     await queryInterface.bulkDelete('SystemSettings', null, {});
   }
 };
+
