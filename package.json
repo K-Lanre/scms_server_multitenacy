@@ -8,6 +8,7 @@
     "db:drop": "sequelize db:drop",
     "db:seed": "sequelize db:seed:all",
     "db:migrate": "sequelize db:migrate",
+    "db:migrate:prod": "sequelize db:migrate --env production",
     "db:setup": "npm run db:drop && npm run db:create && npm run db:migrate && npm run db:seed",
     "db:reseed": "npm run db:reseed:clean && npm run db:migrate && npm run db:seed:all",
     "db:reseed:clean": "sequelize db:drop && sequelize db:create",
@@ -18,6 +19,7 @@
     "db:migrate:undo:all": "sequelize db:migrate:undo:all",
     "start:dev": "nodemon server.js",
     "start:prod": "set NODE_ENV=production && node server.js",
+    "start:render": "npm run db:migrate:prod && node server.js",
     "test": "jest --detectOpenHandles --forceExit"
   },
   "keywords": [],
