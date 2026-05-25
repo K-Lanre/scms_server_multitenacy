@@ -32,7 +32,11 @@ const createDatabaseConnection = () => {
         return new Sequelize("sqlite::memory:", { logging: false });
     }
 
-    if (env === "production" && process.env.DATABASE_URL) {
+    if (env === "production") {
+        if (!process.env.DATABASE_URL) {
+            throw new Error("DATABASE_URL is required when NODE_ENV=production.");
+        }
+
         return new Sequelize(process.env.DATABASE_URL, databaseOptions);
     }
 
