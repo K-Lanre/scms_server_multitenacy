@@ -10,7 +10,10 @@ const config = require(__dirname + '/../config/config.js')[env];
 const db = {};
 
 let sequelize;
-if (config.use_env_variable) {
+if (env !== 'test' && process.env.DATABASE_URL) {
+  const { use_env_variable, ...databaseOptions } = require(__dirname + '/../config/config.js').production;
+  sequelize = new Sequelize(process.env.DATABASE_URL, databaseOptions);
+} else if (config.use_env_variable) {
   sequelize = new Sequelize(process.env[config.use_env_variable], config);
 } else {
   sequelize = new Sequelize(config.database, config.username, config.password, config);

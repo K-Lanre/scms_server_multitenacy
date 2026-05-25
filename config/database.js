@@ -32,12 +32,12 @@ const createDatabaseConnection = () => {
         return new Sequelize("sqlite::memory:", { logging: false });
     }
 
-    if (env === "production") {
-        if (!process.env.DATABASE_URL) {
-            throw new Error("DATABASE_URL is required when NODE_ENV=production.");
-        }
-
+    if (process.env.DATABASE_URL) {
         return new Sequelize(process.env.DATABASE_URL, databaseOptions);
+    }
+
+    if (env === "production") {
+        throw new Error("DATABASE_URL is required when NODE_ENV=production.");
     }
 
     return new Sequelize(
@@ -59,6 +59,7 @@ async function connectDB() {
         console.log("Database connection has been established successfully.");
     } catch (error) {
         console.error("Unable to connect to the database:", error);
+        throw error;
     }
 }
 
