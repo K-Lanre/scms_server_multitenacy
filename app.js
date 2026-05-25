@@ -49,6 +49,13 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
 
 // Routes
+app.get('/', (req, res) => {
+    res.status(200).json({
+        status: 'success',
+        message: 'SCMS server is running'
+    });
+});
+
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
