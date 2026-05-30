@@ -170,7 +170,7 @@ exports.getChartData = catchAsync(async (req, res, next) => {
         // Sum Savings Transactions (Credit only)
         const savingsVolume = await Transaction.sum('amount', {
             where: {
-                transactionType: { [Op.in]: ['deposit', 'savings_contribution'] },
+                transactionType: { [Op.in]: ['deposit', 'transfer_in', 'interest'] },
                 createdAt: { [Op.between]: [monthStart, monthEnd] },
                 ...attachInstitution(req)
             }

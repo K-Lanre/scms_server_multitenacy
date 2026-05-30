@@ -1,10 +1,9 @@
-const { Institution, User, Account } = require('../models');
+const { Institution, User, Account, SavingsProduct, SystemSetting, JobConfig, sequelize } = require('../models');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
-const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
 const { sendNotification } = require('../utils/notificationService');
 const Email = require('../utils/email');
+const { getTreasuryAccount } = require('../utils/treasuryManager');
 
 // Generate unique institution code
 const generateInstitutionCode = async () => {
@@ -20,6 +19,147 @@ const generateInstitutionCode = async () => {
     }
 
     return code;
+};
+
+const buildDefaultSettings = (institutionId, defaultInterestRate) => [
+    {
+        key: 'monthlyThriftAmount',
+        value: '10000',
+        type: 'number',
+        description: 'Default monthly thrift contribution',
+        institutionId
+    },
+    {
+        key: 'monthly_thrift_amount',
+        value: '10000',
+        type: 'number',
+        description: 'Default monthly thrift contribution',
+        institutionId
+    },
+    {
+        key: 'monthly_commission_amount',
+        value: '0',
+        type: 'number',
+        description: 'Default monthly commission amount',
+        institutionId
+    },
+    {
+        key: 'lateThriftPenalty',
+        value: '500',
+        type: 'number',
+        description: 'Penalty for late thrift payment',
+        institutionId
+    },
+    {
+        key: 'thrift_penalty_amount',
+        value: '500',
+        type: 'number',
+        description: 'Penalty for unpaid monthly thrift',
+        institutionId
+    },
+    {
+        key: 'loan_interest_tiers',
+        value: JSON.stringify([
+            { minMonths: 1, maxMonths: 3, rate: Number(defaultInterestRate) || 5, label: 'Emergency' },
+            { minMonths: 4, maxMonths: 12, rate: Math.max((Number(defaultInterestRate) || 5) - 1, 1), label: 'Standard' },
+            { minMonths: 13, maxMonths: 60, rate: Math.max((Number(defaultInterestRate) || 5) - 2, 1), label: 'Project' }
+        ]),
+        type: 'json',
+        description: 'Monthly interest rates based on loan duration',
+        institutionId
+    }
+];
+
+const buildDefaultSavingsProducts = (institutionId, defaultInterestRate) => [
+    {
+        name: 'General Savings',
+        description: 'Default savings product for cooperative members',
+        type: 'safebox',
+        category: 'none',
+        interestRate: Number(defaultInterestRate) || 5,
+        minDeposit: 1000,
+        minDuration: 30,
+        penaltyPercentage: 2,
+        allowEarlyWithdrawal: true,
+        isQuickSaving: false,
+        status: 'active',
+        institutionId
+    },
+    {
+        name: 'Share Capital',
+        description: 'Mandatory shareholding product for dividend eligibility',
+        type: 'fixed',
+        category: 'none',
+        interestRate: 0,
+        minDeposit: 5000,
+        minDuration: 365,
+        penaltyPercentage: 0,
+        allowEarlyWithdrawal: false,
+        isQuickSaving: false,
+        status: 'active',
+        institutionId
+    },
+    {
+        name: 'Target Savings',
+        description: 'Goal-based savings product for planned expenses',
+        type: 'target',
+        category: 'none',
+        interestRate: Number(defaultInterestRate) || 5,
+        minDeposit: 1000,
+        minDuration: 90,
+        maxDuration: 730,
+        penaltyPercentage: 3,
+        allowEarlyWithdrawal: true,
+        isQuickSaving: false,
+        status: 'active',
+        institutionId
+    }
+];
+
+const buildDefaultJobConfigs = (institutionId, institutionCode) => {
+    const suffix = institutionCode.toLowerCase();
+    return [
+        {
+            jobId: `interest-calculation-${suffix}`,
+            name: 'Daily Interest Calculation',
+            description: 'Calculate and credit interest to savings accounts',
+            cronExpression: '0 1 * * *',
+            isEnabled: true,
+            isSystem: true,
+            category: 'finance',
+            institutionId
+        },
+        {
+            jobId: `thrift-deduction-${suffix}`,
+            name: 'Monthly Thrift Deduction',
+            description: 'Automatically deduct monthly thrift contributions from member accounts',
+            cronExpression: '0 0 27 * *',
+            isEnabled: true,
+            isSystem: true,
+            category: 'finance',
+            institutionId
+        },
+        {
+            jobId: `loan-repayment-${suffix}`,
+            name: 'Automated Loan Repayment',
+            description: 'Process automated loan repayments for due loans',
+            cronExpression: '0 2 * * *',
+            isEnabled: true,
+            isSystem: true,
+            category: 'finance',
+            institutionId
+        },
+        {
+            jobId: `autosaver-${suffix}`,
+            name: 'Auto-Save Processing',
+            description: 'Process matured target savings plans',
+            cronExpression: '0 3 * * *',
+            isEnabled: true,
+            isSystem: true,
+            category: 'finance',
+            institutionId
+        }
+    ];
 };
 
 /**
@@ -40,12 +180,146 @@ exports.createInstitution = catchAsync(async (req, res, next) => {
         return next(new AppError('Please provide adminName, adminEmail, and adminPassword for the first institution admin', 400));
     }
 
+    const t = await sequelize.transaction();
+    let institution;
+    let admin;
+
     // Auto-generate code if not provided
     const institutionCode = code ? code.toUpperCase() : await generateInstitutionCode();
 
-    // Check if code exists (only if manually provided)
-    if (code) {
-        const existingInst = await Institution.findOne({ where: { code: institutionCode } });
+    try {
+        // Check if code exists (only if manually provided)
+        if (code) {
+            const existingInst = await Institution.findOne({ where: { code: institutionCode }, transaction: t });
+            if (existingInst) {
+                await t.rollback();
+                return next(new AppError('An institution with this code already exists', 400));
+            }
+        }
+
+        // Check if admin email already exists
+        const existingAdmin = await User.findOne({ where: { email: adminEmail }, transaction: t });
+        if (existingAdmin) {
+            await t.rollback();
+            return next(new AppError('Admin email already registered', 400));
+        }
+
+        // Create institution
+        institution = await Institution.create({
+            name,
+            email,
+            phone,
+            address,
+            code: institutionCode,
+            settings: {
+                currency: currency || 'NGN',
+                defaultInterestRate: defaultInterestRate || 5,
+                timezone: 'Africa/Lagos',
+                thriftFrequency: 'monthly'
+            }
+        }, { transaction: t });
+
+        // Create first admin for this institution. User model hashes the raw password.
+        admin = await User.create({
+            name: adminName,
+            email: adminEmail,
+            password: adminPassword,
+            institutionId: institution.id,
+            role: 'institution_admin',
+            status: 'active',
+            isEmailVerified: true
+        }, { transaction: t });
+
+        await Account.bulkCreate([
+            {
+                userId: admin.id,
+                institutionId: institution.id,
+                accountType: 'savings',
+                accountNumber: `ADM-SAV-${admin.id.toString().padStart(8, '0')}`,
+                balance: 0.00,
+                status: 'active',
+                openedAt: new Date()
+            },
+            {
+                userId: admin.id,
+                institutionId: institution.id,
+                accountType: 'share_capital',
+                accountNumber: `ADM-SHR-${admin.id.toString().padStart(8, '0')}`,
+                balance: 0.00,
+                status: 'active',
+                openedAt: new Date()
+            }
+        ], { transaction: t });
+
+        await Promise.all([
+            SystemSetting.bulkCreate(buildDefaultSettings(institution.id, defaultInterestRate), { transaction: t }),
+            SavingsProduct.bulkCreate(buildDefaultSavingsProducts(institution.id, defaultInterestRate), { transaction: t }),
+            JobConfig.bulkCreate(buildDefaultJobConfigs(institution.id, institution.code), { transaction: t }),
+            getTreasuryAccount(institution.id, t)
+        ]);
+
+        await t.commit();
+    } catch (err) {
+        await t.rollback();
+        if (err.name === 'SequelizeUniqueConstraintError') {
+            return next(new AppError('Institution setup conflicts with existing records. Please use a different institution code or admin email.', 400));
+        }
+        return next(err);
+    }
+
+    try {
+        const superAdmins = await User.findAll({ where: { role: 'super_admin', status: 'active' } });
+        for (const sa of superAdmins) {
+            await sendNotification({
+                userId: sa.id,
+                title: 'New Cooperative Onboarded',
+                message: `${institution.name} has been successfully added to the platform. Admin: ${admin.name}.`,
+                type: 'success',
+                link: `/superadmin/institutions/${institution.id}`
+            });
+        }
+    } catch (err) {
+        console.error('Super admin notification failed:', err);
+    }
+
+    // --- SEND WELCOME EMAILS ---
+    try {
+        const clientUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const loginUrl = `${clientUrl}/login`;
+        
+        // 1. Send to Admin
+        const adminEmailObj = new Email(admin, loginUrl);
+        await adminEmailObj.sendInstitutionWelcome(institution, adminPassword);
+
+        // 2. Send to Institution generic email if different
+        if (email && email !== adminEmail) {
+            const instEmailObj = new Email({ name: institution.name, email: institution.email }, loginUrl);
+            await instEmailObj.sendInstitutionWelcome(institution, adminPassword);
+        }
+    } catch (err) {
+        console.error('Welcome email failed to send:', err);
+        // We don't fail the request if email fails, but we log it
+    }
+
+    res.status(201).json({
+        status: 'success',
+        data: {
+            institution,
+            admin: {
+                id: admin.id,
+                name: admin.name,
+                email: admin.email,
+                role: admin.role
+            }
+        }
+    });
+});
+
+/*
+    Legacy implementation kept out of execution path while the creation flow is
+    consolidated above.
+*/
+/*
         if (existingInst) {
             return next(new AppError('An institution with this code already exists', 400));
         }
@@ -150,6 +424,7 @@ exports.createInstitution = catchAsync(async (req, res, next) => {
         }
     });
 });
+*/
 
 /**
  * @swagger
