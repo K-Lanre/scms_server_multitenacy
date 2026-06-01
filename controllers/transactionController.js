@@ -191,6 +191,102 @@ exports.withdraw = catchAsync(async (req, res, next) => {
     });
 });
 
+exports.transfer = catchAsync(async (req, res, next) => {
+    const { fromAccountId, toAccountNumber, amount, purpose = 'account_transfer', description } = req.body;
+
+    const sourceAccount = await Account.findOne({
+        where: {
+            id: fromAccountId,
+            userId: req.user.id,
+            ...attachInstitution(req)
+        }
+    });
+
+    if (!sourceAccount) {
+        return next(new AppError('Source account not found', 404));
+    }
+
+    const destinationAccount = await Account.findOne({
+        where: {
+            accountNumber: toAccountNumber,
+            institutionId: sourceAccount.institutionId
+        }
+    });
+
+    if (!destinationAccount) {
+        return next(new AppError('Destination account not found', 404));
+    }
+
+    if (sourceAccount.id === destinationAccount.id) {
+        return next(new AppError('Cannot transfer to the same account', 400));
+    }
+
+    if (sourceAccount.accountType === 'share_capital' || destinationAccount.accountType === 'share_capital') {
+        return next(new AppError('Transfers involving share capital accounts are not allowed', 400));
+    }
+
+    const t = await sequelize.transaction();
+
+    try {
+        const transferOut = await recordTransaction({
+            accountId: sourceAccount.id,
+            transactionType: 'transfer_out',
+            amount,
+            description: description || `Transfer to ${destinationAccount.accountNumber}`,
+            performedBy: req.user.id,
+            t
+        });
+
+        const transferIn = await recordTransaction({
+            accountId: destinationAccount.id,
+            transactionType: 'transfer_in',
+            amount,
+            description: description || `Transfer from ${sourceAccount.accountNumber}`,
+            performedBy: req.user.id,
+            t
+        });
+
+        await transferOut.update({
+            linkedTransactionId: transferIn.id,
+            purpose
+        }, { transaction: t });
+
+        await transferIn.update({
+            linkedTransactionId: transferOut.id,
+            purpose
+        }, { transaction: t });
+
+        await t.commit();
+
+        socketIO.emitToUser(sourceAccount.userId, 'account_sync', {
+            type: 'transfer_out',
+            accountId: sourceAccount.id,
+            amount
+        });
+
+        socketIO.emitToUser(destinationAccount.userId, 'account_sync', {
+            type: 'transfer_in',
+            accountId: destinationAccount.id,
+            amount
+        });
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                reference: transferOut.reference,
+                linkedTransactionId: transferIn.id,
+                purpose,
+                amount,
+                fromAccountId: sourceAccount.id,
+                toAccountNumber: destinationAccount.accountNumber
+            }
+        });
+    } catch (err) {
+        await t.rollback();
+        return next(err);
+    }
+});
+
 /**
  * @swagger
  * /api/v1/transactions:

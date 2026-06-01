@@ -1,7 +1,7 @@
 const express = require('express');
 const transactionController = require('../controllers/transactionController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
-const { withdrawDepositValidators } = require('../middleware/validators');
+const { transferValidators, withdrawDepositValidators } = require('../middleware/validators');
 const { checkIdempotency } = require('../middleware/idempotency');
 
 const router = express.Router();
@@ -17,6 +17,7 @@ router.use(protect);
  */
 
 // Deposit and withdrawal (staff/admin only)
+router.post('/transfer', checkIdempotency, transferValidators, transactionController.transfer);
 router.post('/deposit', restrictTo('staff', 'super_admin'), checkIdempotency, withdrawDepositValidators, transactionController.deposit);
 router.post('/withdraw', restrictTo('staff', 'super_admin'), checkIdempotency, withdrawDepositValidators, transactionController.withdraw);
 

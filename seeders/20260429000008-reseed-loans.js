@@ -18,11 +18,11 @@ module.exports = {
       const loans = [];
       const repayments = [];
       
-      // Get members with their institutions and savings account balances
+// Get members with their institutions and savings account balances
       const [members] = await queryInterface.sequelize.query(
-        `SELECT u.id, u.institutionId, u.email, a.balance as savingsBalance
-         FROM Users u
-         JOIN Accounts a ON u.id = a.userId AND a.accountType = 'savings'
+        `SELECT u.id, u."institutionId", u.email, a.balance as "savingsBalance"
+         FROM "Users" u
+         JOIN "Accounts" a ON u.id = a."userId" AND a."accountType" = 'savings'
          WHERE u.role = 'member'
          ORDER BY u.id`,
         { transaction }
@@ -30,7 +30,7 @@ module.exports = {
       
       // Get admin users for approval
       const [admins] = await queryInterface.sequelize.query(
-        `SELECT id, institutionId FROM Users 
+        `SELECT id, "institutionId" FROM "Users" 
          WHERE role IN ('super_admin', 'institution_admin') 
          ORDER BY id`,
         { transaction }
@@ -167,7 +167,7 @@ module.exports = {
       
       // Get the actual loan IDs inserted (they may differ from our sequential IDs)
       const [insertedLoans] = await queryInterface.sequelize.query(
-        'SELECT id FROM Loans ORDER BY id',
+        'SELECT id FROM "Loans" ORDER BY id',
         { transaction }
       );
       
@@ -210,3 +210,4 @@ module.exports = {
     await queryInterface.bulkDelete('Loans', null, {});
   }
 };
+

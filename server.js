@@ -1,3 +1,9 @@
+require('dotenv').config();
+
+if (!process.env.NODE_ENV) {
+    process.env.NODE_ENV = 'production';
+}
+
 const http = require('http');
 const app = require('./app');
 const socketIO = require('./utils/socket');

@@ -5,6 +5,13 @@
  * All external integration fields use fake data (no real API calls).
  */
 
+let sequence = 0;
+
+function nextSequence() {
+  sequence += 1;
+  return sequence.toString(36).padStart(4, '0');
+}
+
 /**
  * Generate a fake Paystack customer code
  * Format: CUS_ + 15 alphanumeric characters
@@ -38,7 +45,7 @@ function generatePaystackRecipientCode() {
 function generateTransferReference() {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  return `TRF_${timestamp}_${random}`;
+  return `TRF_${timestamp}_${nextSequence()}_${random}`;
 }
 
 /**
@@ -48,7 +55,7 @@ function generateTransferReference() {
 function generateDisbursementReference() {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  return `DISB_${timestamp}_${random}`;
+  return `DISB_${timestamp}_${nextSequence()}_${random}`;
 }
 
 /**
@@ -64,8 +71,7 @@ function generateNuban() {
  */
 function generateAccountNumber(prefix) {
   const timestamp = Date.now();
-  const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  return `${prefix}${timestamp}${random}`;
+  return `${prefix}${timestamp}${nextSequence()}`;
 }
 
 /**
@@ -75,7 +81,7 @@ function generateAccountNumber(prefix) {
 function generateTransactionReference(type) {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  return `${type}_${timestamp}_${random}`;
+  return `${type}_${timestamp}_${nextSequence()}_${random}`;
 }
 
 /**
@@ -219,3 +225,4 @@ module.exports = {
   lastNames,
   phonePrefixes
 };
+

@@ -7,6 +7,44 @@ module.exports = {
     
     try {
       console.log('🏛️  Seeding Institutions...');
+
+      const dependentTables = [
+        'AuditLogs',
+        'Notifications',
+        'WithdrawalRequests',
+        'MeetingMinutes',
+        'Meetings',
+        'Contributions',
+        'LoanRepayments',
+        'LoanGuarantors',
+        'Loans',
+        'UserSavingsPlans',
+        'Transactions',
+        'Accounts',
+        'PostingLogs',
+        'DividendRuns',
+        'Levies',
+        'WelfareApplications',
+        'Donations',
+        'DonationRequests'
+      ];
+
+      const existingTables = await queryInterface.showAllTables({ transaction });
+      const existingTableNames = existingTables.map((table) => (
+        typeof table === 'string' ? table : table.tableName
+      ));
+      const tablesToTruncate = dependentTables.filter((table) => existingTableNames.includes(table));
+
+      if (tablesToTruncate.length > 0) {
+        const quotedTables = tablesToTruncate
+          .map((table) => queryInterface.queryGenerator.quoteTable(table))
+          .join(', ');
+
+        await queryInterface.sequelize.query(
+          `TRUNCATE TABLE ${quotedTables} RESTART IDENTITY CASCADE`,
+          { transaction }
+        );
+      }
       
       // Clear existing institutions first
       await queryInterface.bulkDelete('Institutions', null, { transaction });
@@ -102,3 +140,4 @@ module.exports = {
     await queryInterface.bulkDelete('Institutions', null, {});
   }
 };
+

@@ -5,24 +5,37 @@
  * accounts, and JWT tokens so each test suite can get up
  * and running without duplicating setup code.
  */
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { User, Account, Transaction } = require('../../models');
+const { Institution, User, Account, Transaction } = require('../../models');
 const { generateReference } = require('../../utils/accountHelper');
+
+const getTestInstitution = async () => {
+    const [institution] = await Institution.findOrCreate({
+        where: { code: 'TESTCOOP' },
+        defaults: {
+            name: 'Test Cooperative',
+            email: 'test@scms.test',
+            status: 'active'
+        }
+    });
+
+    return institution;
+};
 
 /**
  * Create a test user and return it with a signed JWT token.
  * @param {object} overrides – override any User fields
  */
 const createUser = async (overrides = {}) => {
-    const hashedPassword = await bcrypt.hash('Test@1234', 12);
+    const institution = await getTestInstitution();
     const user = await User.create({
         name: 'Test User',
         email: `test_${Date.now()}_${Math.random().toString(36).slice(2)}@scms.test`,
-        password: hashedPassword,
+        password: 'Test@1234',
         role: 'member',
         status: 'active',
         isEmailVerified: true,
+        institutionId: institution.id,
         ...overrides
     });
 
@@ -34,8 +47,10 @@ const createUser = async (overrides = {}) => {
  * Create a test account for a given userId.
  */
 const createAccount = async (userId, overrides = {}) => {
+    const user = await User.findByPk(userId);
     return Account.create({
         userId,
+        institutionId: overrides.institutionId || user?.institutionId,
         accountNumber: `ACC${Date.now()}${Math.floor(Math.random() * 9999)}`,
         accountType: 'savings',
         balance: 50000.00,
@@ -48,8 +63,10 @@ const createAccount = async (userId, overrides = {}) => {
  * Seed a completed transaction directly
  */
 const createTransaction = async (accountId, performedBy, overrides = {}) => {
+    const account = await Account.findByPk(accountId);
     return Transaction.create({
         accountId,
+        institutionId: overrides.institutionId || account?.institutionId,
         transactionType: 'deposit',
         amount: 1000.00,
         balanceAfter: 51000.00,
@@ -62,4 +79,4 @@ const createTransaction = async (accountId, performedBy, overrides = {}) => {
     });
 };
 
-module.exports = { createUser, createAccount, createTransaction };
+module.exports = { createUser, createAccount, createTransaction, getTestInstitution };

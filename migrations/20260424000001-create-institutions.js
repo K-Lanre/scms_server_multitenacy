@@ -1,42 +1,44 @@
 'use strict';
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('Meetings', {
+    await queryInterface.createTable('Institutions', {
       id: {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
         type: Sequelize.INTEGER
       },
-      title: {
+      name: {
         type: Sequelize.STRING,
         allowNull: false
       },
-      description: {
+      code: {
+        type: Sequelize.STRING,
+        allowNull: false,
+        unique: true
+      },
+      email: {
+        type: Sequelize.STRING,
+        allowNull: false
+      },
+      phone: {
+        type: Sequelize.STRING,
+        allowNull: false
+      },
+      address: {
         type: Sequelize.TEXT,
         allowNull: false
       },
-      type: {
-        type: Sequelize.ENUM('general', 'executive', 'emergency', 'other'),
-        allowNull: false
-      },
-      date: {
-        type: Sequelize.DATEONLY,
-        allowNull: false
-      },
-      time: {
-        type: Sequelize.STRING,
-        allowNull: false
-      },
-      location: {
-        type: Sequelize.STRING,
-        allowNull: false
-      },
       status: {
-        type: Sequelize.ENUM('scheduled', 'completed', 'cancelled'),
-        allowNull: false,
-        defaultValue: 'scheduled'
+        type: Sequelize.ENUM('active', 'inactive', 'suspended'),
+        defaultValue: 'active',
+        allowNull: false
+      },
+      settings: {
+        type: Sequelize.JSONB,
+        allowNull: true
       },
       createdAt: {
         allowNull: false,
@@ -48,7 +50,8 @@ module.exports = {
       }
     });
   },
+
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('Meetings');
+    await queryInterface.dropTable('Institutions');
   }
 };

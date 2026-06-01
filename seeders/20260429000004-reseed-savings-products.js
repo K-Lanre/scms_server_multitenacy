@@ -4,26 +4,26 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     const transaction = await queryInterface.sequelize.transaction();
-    
+
     try {
       console.log('🏦 Seeding Savings Products...');
-      
+
       // Clear existing savings products
       await queryInterface.bulkDelete('SavingsProducts', null, { transaction });
-      
+
       const now = new Date();
-      
+
       // Get institution IDs
       const [institutions] = await queryInterface.sequelize.query(
-        'SELECT id, code FROM Institutions WHERE code IN ("COOP001", "UTS002", "MCU003")',
+        `SELECT id, code FROM "Institutions" WHERE code IN ('COOP001', 'UTS002', 'MCU003')`,
         { transaction }
       );
-      
+
       const institutionMap = {};
       institutions.forEach(inst => {
         institutionMap[inst.code] = inst.id;
       });
-      
+
       // Product templates per institution
       const productsByInstitution = {
         COOP001: [
@@ -193,13 +193,13 @@ module.exports = {
           }
         ]
       };
-      
+
       const allProducts = [];
-      
+
       Object.keys(institutionMap).forEach(code => {
         const institutionId = institutionMap[code];
         const products = productsByInstitution[code] || [];
-        
+
         products.forEach(product => {
           allProducts.push({
             ...product,
@@ -210,12 +210,12 @@ module.exports = {
           });
         });
       });
-      
+
       await queryInterface.bulkInsert('SavingsProducts', allProducts, { transaction });
-      
+
       await transaction.commit();
       console.log(`✅ Created ${allProducts.length} savings products (${allProducts.length / 3} per institution)`);
-      
+
     } catch (error) {
       await transaction.rollback();
       console.error('❌ Error seeding savings products:', error);
@@ -228,3 +228,4 @@ module.exports = {
     await queryInterface.bulkDelete('SavingsProducts', null, {});
   }
 };
+

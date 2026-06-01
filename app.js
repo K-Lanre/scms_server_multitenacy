@@ -22,11 +22,21 @@ const institutionRoutes = require('./routes/institutionRoutes');
 const superAdminRoutes = require('./routes/superAdminRoutes');
 const treasuryRoutes = require('./routes/treasuryRoutes');
 const searchRoutes = require('./routes/searchRoutes');
+const paystackWebhookController = require('./controllers/paystackWebhookController');
 
 const app = express();
 
 // Middleware
 app.use(cors());
+
+// Paystack signs the exact raw JSON payload, so this route must be mounted
+// before express.json() mutates req.body into an object.
+app.post(
+    '/api/v1/webhooks/paystack',
+    express.raw({ type: 'application/json' }),
+    paystackWebhookController.handlePaystackWebhook
+);
+
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -35,11 +45,17 @@ app.use('/api/', apiLimiter);
 
 const AppError = require('./utils/appError');
 const globalErrorHandler = require('./controllers/errorController');
-const paystackWebhookController = require('./controllers/paystackWebhookController'); // Added this line
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
 
 // Routes
+app.get('/', (req, res) => {
+    res.status(200).json({
+        status: 'success',
+        message: 'SCMS server is running'
+    });
+});
+
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
@@ -61,9 +77,6 @@ app.use('/api/v1/institutions', institutionRoutes);
 app.use('/api/v1/super-admin', superAdminRoutes);
 app.use('/api/v1/treasury', treasuryRoutes);
 app.use('/api/v1/search', searchRoutes);
-
-// Webhooks
-app.post('/api/v1/webhooks/paystack', paystackWebhookController.handlePaystackWebhook); // Added this line
 
 // Handle Unhandled Routes
 app.use((req, res, next) => {

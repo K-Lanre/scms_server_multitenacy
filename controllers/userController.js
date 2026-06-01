@@ -597,14 +597,14 @@ exports.adminCreateUser = catchAsync(async (req, res, next) => {
         email: newUser.email
     });
 
-    // Automatically generate Main and Savings accounts for all users created by admins
+    // Automatically generate Savings and Share Capital accounts for all users created by admins
     // This ensures staff and admins can also save and participate in cooperative activities
     await Account.bulkCreate([
         {
             userId: newUser.id,
             institutionId: newUser.institutionId,
-            type: 'main',
-            accountNumber: `MA${newUser.id.toString().padStart(8, '0')}`,
+            accountType: 'savings',
+            accountNumber: `SAV${newUser.id.toString().padStart(8, '0')}`,
             balance: 0.00,
             status: 'active',
             openedAt: new Date()
@@ -612,8 +612,8 @@ exports.adminCreateUser = catchAsync(async (req, res, next) => {
         {
             userId: newUser.id,
             institutionId: newUser.institutionId,
-            type: 'savings',
-            accountNumber: `SA${newUser.id.toString().padStart(8, '0')}`,
+            accountType: 'share_capital',
+            accountNumber: `SHR${newUser.id.toString().padStart(8, '0')}`,
             balance: 0.00,
             status: 'active',
             openedAt: new Date()

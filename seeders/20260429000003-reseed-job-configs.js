@@ -4,26 +4,26 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     const transaction = await queryInterface.sequelize.transaction();
-    
+
     try {
       console.log('⏰ Seeding Job Configurations...');
-      
+
       // Clear existing job configs
       await queryInterface.bulkDelete('JobConfigs', null, { transaction });
-      
+
       const now = new Date();
-      
+
       // Get institution IDs
       const [institutions] = await queryInterface.sequelize.query(
-        'SELECT id, code FROM Institutions WHERE code IN ("COOP001", "UTS002", "MCU003")',
+        `SELECT id, code FROM "Institutions" WHERE code IN ('COOP001', 'UTS002', 'MCU003')`,
         { transaction }
       );
-      
+
       const institutionMap = {};
       institutions.forEach(inst => {
         institutionMap[inst.code] = inst.id;
       });
-      
+
       // Default jobs for each institution
       const jobTemplates = [
         {
@@ -81,9 +81,9 @@ module.exports = {
           category: 'maintenance'
         }
       ];
-      
+
       const jobConfigs = [];
-      
+
       // Create jobs for each institution
       Object.keys(institutionMap).forEach(code => {
         const institutionId = institutionMap[code];
@@ -100,12 +100,12 @@ module.exports = {
           });
         });
       });
-      
+
       await queryInterface.bulkInsert('JobConfigs', jobConfigs, { transaction });
-      
+
       await transaction.commit();
       console.log(`✅ Created ${jobConfigs.length} job configurations (${jobTemplates.length} per institution)`);
-      
+
     } catch (error) {
       await transaction.rollback();
       console.error('❌ Error seeding job configurations:', error);
@@ -118,3 +118,4 @@ module.exports = {
     await queryInterface.bulkDelete('JobConfigs', null, {});
   }
 };
+

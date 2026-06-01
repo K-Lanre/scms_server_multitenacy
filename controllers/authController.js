@@ -141,6 +141,16 @@ exports.login = catchAsync(async (req, res, next) => {
         return next(new AppError('Incorrect email or password', 401));
     }
 
+    if (['inactive', 'suspended'].includes(user.status)) {
+        logAction(req, 'LOGIN_BLOCKED', { email, reason: user.status }, user.id);
+        return next(new AppError(`Your account is ${user.status}. Please contact your institution administrator.`, 403));
+    }
+
+    if (user.role !== 'super_admin' && (!user.institution || user.institution.status !== 'active')) {
+        logAction(req, 'LOGIN_BLOCKED', { email, reason: 'institution_inactive' }, user.id);
+        return next(new AppError('Your institution is inactive or unavailable. Please contact support.', 403));
+    }
+
     logAction(req, 'LOGIN_SUCCESS', null, user.id);
     createSendToken(user, 200, res);
 });

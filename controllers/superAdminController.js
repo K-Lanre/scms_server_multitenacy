@@ -442,3 +442,159 @@ exports.createPlatformUser = catchAsync(async (req, res, next) => {
         data: { user: newUser }
     });
 });
+
+/**
+ * @desc Get platform-wide detailed reporting data for reports tab
+ */
+exports.getPlatformReportSummary = catchAsync(async (req, res, next) => {
+    const { startDate, endDate } = req.query;
+
+    const dateFilter = {};
+    if (startDate || endDate) {
+        if (startDate) {
+            const start = new Date(startDate);
+            if (!isNaN(start.getTime())) {
+                start.setHours(0, 0, 0, 0);
+                dateFilter[Op.gte] = start;
+            }
+        }
+        if (endDate) {
+            const end = new Date(endDate);
+            if (!isNaN(end.getTime())) {
+                end.setHours(23, 59, 59, 999);
+                dateFilter[Op.lte] = end;
+            }
+        }
+    }
+
+    const transactionDateFilter = Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {};
+
+    // 1. Transaction volume aggregates grouped by type
+    const txnSummary = await Transaction.findAll({
+        where: {
+            status: 'completed',
+            ...transactionDateFilter
+        },
+        attributes: [
+            'transactionType',
+            [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+            [sequelize.fn('SUM', sequelize.col('amount')), 'totalAmount']
+        ],
+        group: ['transactionType']
+    });
+
+    // 2. High-value transactions (Security compliance threshold: ₦1,000,000)
+    const highValueTxns = await Transaction.findAll({
+        where: {
+            status: 'completed',
+            amount: { [Op.gte]: 1000000.00 },
+            ...transactionDateFilter
+        },
+        limit: 20,
+        order: [['amount', 'DESC']],
+        include: [
+            {
+                model: Account,
+                as: 'account',
+                attributes: ['accountNumber', 'accountType'],
+                include: [{ model: User, as: 'user', attributes: ['name', 'email'] }]
+            },
+            {
+                model: Institution,
+                as: 'institution',
+                attributes: ['name', 'code']
+            }
+        ]
+    });
+
+    // 3. System-wide aggregates (Active institutions, members, savings balance, outstanding loans)
+    const totalInstitutions = await Institution.count();
+    const activeInstitutions = await Institution.count({ where: { status: 'active' } });
+    const totalUsers = await User.count();
+    
+    const totalSystemFunds = await Account.sum('balance') || 0;
+    const totalSavings = await Account.sum('balance', {
+        where: { accountType: { [Op.in]: ['savings', 'savings_plan'] } }
+    }) || 0;
+
+    const totalLoansDisbursed = await Loan.sum('loanAmount', {
+        where: { status: { [Op.in]: ['disbursed', 'repaying', 'completed', 'defaulted'] } }
+    }) || 0;
+    const totalOutstandingLoans = await Loan.sum('outstandingBalance', {
+        where: { status: { [Op.in]: ['disbursed', 'repaying', 'defaulted'] } }
+    }) || 0;
+
+    const defaultedLoansAmount = await Loan.sum('outstandingBalance', {
+        where: { status: 'defaulted' }
+    }) || 0;
+
+    // 4. Institution Performance summary
+    const institutions = await Institution.findAll({
+        attributes: ['id', 'name', 'code', 'status', 'createdAt']
+    });
+
+    const institutionReport = await Promise.all(
+        institutions.map(async (inst) => {
+            const memberCount = await User.count({ where: { institutionId: inst.id, role: 'member' } });
+            
+            const balance = await Account.sum('balance', {
+                where: { institutionId: inst.id }
+            }) || 0;
+
+            const instTxnVolume = await Transaction.sum('amount', {
+                where: {
+                    institutionId: inst.id,
+                    status: 'completed',
+                    ...transactionDateFilter
+                }
+            }) || 0;
+
+            const instTxnCount = await Transaction.count({
+                where: {
+                    institutionId: inst.id,
+                    status: 'completed',
+                    ...transactionDateFilter
+                }
+            }) || 0;
+
+            const outstandingLoans = await Loan.sum('outstandingBalance', {
+                where: {
+                    institutionId: inst.id,
+                    status: { [Op.in]: ['disbursed', 'repaying', 'defaulted'] }
+                }
+            }) || 0;
+
+            return {
+                id: inst.id,
+                name: inst.name,
+                code: inst.code,
+                status: inst.status,
+                memberCount,
+                balance,
+                txnVolume: instTxnVolume,
+                txnCount: instTxnCount,
+                outstandingLoans
+            };
+        })
+    );
+
+    res.status(200).json({
+        status: 'success',
+        data: {
+            vitals: {
+                totalInstitutions,
+                activeInstitutions,
+                totalUsers,
+                totalSystemFunds,
+                totalSavings,
+                totalLoansDisbursed,
+                totalOutstandingLoans,
+                defaultedLoansAmount
+            },
+            transactionMetrics: txnSummary,
+            highValueAlerts: highValueTxns,
+            institutionSummary: institutionReport
+        }
+    });
+});
+

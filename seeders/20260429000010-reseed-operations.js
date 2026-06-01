@@ -20,27 +20,27 @@ module.exports = {
 
       const now = new Date();
 
-      // Get members and their institutions
+// Get members and their institutions
       const [members] = await queryInterface.sequelize.query(
-        `SELECT id, institutionId, email FROM Users WHERE role = 'member' ORDER BY id`,
+        `SELECT id, "institutionId", email FROM "Users" WHERE role = 'member' ORDER BY id`,
         { transaction }
       );
-
+      
       // Get admin users
       const [admins] = await queryInterface.sequelize.query(
-        `SELECT id, institutionId FROM Users WHERE role IN ('super_admin', 'institution_admin', 'staff') ORDER BY id`,
+        `SELECT id, "institutionId" FROM "Users" WHERE role IN ('super_admin', 'institution_admin', 'staff') ORDER BY id`,
         { transaction }
       );
-
+      
       // Get institutions
       const [institutions] = await queryInterface.sequelize.query(
-        'SELECT id, code, name FROM Institutions ORDER BY id',
+        'SELECT id, code, name FROM "Institutions" ORDER BY id',
         { transaction }
       );
-
+      
       // Get accounts for withdrawal requests
       const [accounts] = await queryInterface.sequelize.query(
-        `SELECT id, userId, institutionId, balance FROM Accounts WHERE accountType = 'savings'`,
+        `SELECT id, "userId", "institutionId", balance FROM "Accounts" WHERE "accountType" = 'savings'`,
         { transaction }
       );
 
@@ -52,7 +52,7 @@ module.exports = {
 
       // Get monthly thrift amounts per institution from settings
       const [institutionSettings] = await queryInterface.sequelize.query(
-        `SELECT institutionId, value FROM SystemSettings WHERE \`key\` = 'monthlyThriftAmount'`,
+        `SELECT "institutionId", value FROM "SystemSettings" WHERE key = 'monthlyThriftAmount'`,
         { transaction }
       );
 
@@ -144,7 +144,7 @@ module.exports = {
 
       // Get actual meeting IDs for minutes
       const [insertedMeetings] = await queryInterface.sequelize.query(
-        'SELECT id FROM Meetings WHERE status = "completed" ORDER BY id',
+        `SELECT id FROM "Meetings" WHERE status = 'completed' ORDER BY id`,
         { transaction }
       );
 
@@ -289,3 +289,4 @@ module.exports = {
     await queryInterface.bulkDelete('Contributions', null, {});
   }
 };
+
