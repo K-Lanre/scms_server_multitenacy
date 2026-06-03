@@ -286,7 +286,7 @@ exports.createInstitution = catchAsync(async (req, res, next) => {
     try {
         const clientUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         const loginUrl = `${clientUrl}/login`;
-        
+
         // 1. Send to Admin
         const adminEmailObj = new Email(admin, loginUrl);
         await adminEmailObj.sendInstitutionWelcome(institution, adminPassword);
@@ -439,7 +439,11 @@ exports.getPublicInstitutions = catchAsync(async (req, res, next) => {
 
     const where = { status: 'active' };
     if (query) {
-        where.name = { [Op.like]: `%${query}%` };
+        where.name = sequelize.where(
+            sequelize.fn('LOWER', sequelize.col('name')),
+            'LIKE',
+            `%${query.toLowerCase()}%`
+        );
     }
 
     const institutions = await Institution.findAll({
@@ -559,7 +563,7 @@ exports.updateInstitution = catchAsync(async (req, res, next) => {
             thriftFrequency: parsedSettings.thriftFrequency ?? existingSettings.thriftFrequency ?? 'monthly',
             brandColor: parsedSettings.brandColor ?? existingSettings.brandColor ?? '#2563eb',
         };
-        
+
         updatePayload.settings = newSettings;
     }
 
@@ -574,7 +578,7 @@ exports.updateInstitution = catchAsync(async (req, res, next) => {
 
     // Use instance-level update and ensure JSON changes are tracked
     await institution.update(updatePayload);
-    
+
     // Explicitly check if settings were updated and mark as changed if needed
     // (though instance.update() should handle this if a new object is provided)
     if (updatePayload.settings) {

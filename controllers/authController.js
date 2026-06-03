@@ -113,6 +113,7 @@ exports.signup = catchAsync(async (req, res, next) => {
             await new Email(newUser, process.env.FRONTEND_URL, institution).sendEmailVerification(verificationToken);
         } catch (err) {
             console.error('Email failed to send:', err);
+            console.log(`[DEVELOPMENT FALLBACK] Verification code for ${newUser.email}: ${verificationToken}`);
         }
 
         createSendToken(newUser, 201, res);
@@ -315,6 +316,7 @@ exports.resendVerification = catchAsync(async (req, res, next) => {
         });
     } catch (err) {
         console.error('Failed to send verification email:', err);
+        console.log(`[DEVELOPMENT FALLBACK] Verification code for ${user.email}: ${verificationToken}`);
         return next(new AppError('Error sending verification email. Please try again later.', 500));
     }
 });
