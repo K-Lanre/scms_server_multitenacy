@@ -8,30 +8,51 @@ module.exports = class Email {
         this.url = url;
         this.from = process.env.EMAIL_FROM;
         this.institution = institution || user.institution;
-        
+
         // Default branding fallback
         this.brandName = this.institution?.name || 'SCMS Finance';
         this.brandColor = '#2563eb'; // Deep blue
-        this.logoUrl = this.institution?.logoUrl 
+        this.logoUrl = this.institution?.logoUrl
             ? `${process.env.VITE_SERVER_URL || 'http://localhost:3000'}/img/institutions/${this.institution.logoUrl}`
             : null;
     }
 
     newTransport() {
-        // Mailtrap for development
-        return nodemailer.createTransport({
+        const transportConfig = {
             host: process.env.EMAIL_HOST,
-            port: process.env.EMAIL_PORT,
+            port: parseInt(process.env.EMAIL_PORT, 10) || 587,
             auth: {
                 user: process.env.EMAIL_USERNAME,
                 pass: process.env.EMAIL_PASSWORD
+            },
+            // TLS configuration for production
+            tls: {
+                // Do not fail on invalid certs (useful for some providers)
+                rejectUnauthorized: process.env.NODE_ENV === 'production' ? false : true
             }
-        });
+        };
+
+        // For Gmail and other providers that require secure connection on port 465
+        if (process.env.EMAIL_PORT === '465' || process.env.EMAIL_SECURE === 'true') {
+            transportConfig.secure = true;
+            transportConfig.port = 465;
+        } else {
+            // For port 587 (STARTTLS)
+            transportConfig.secure = false;
+        }
+
+        // Enable debug mode in development
+        if (process.env.NODE_ENV === 'development') {
+            transportConfig.debug = true;
+            transportConfig.logger = true;
+        }
+
+        return nodemailer.createTransport(transportConfig);
     }
 
     // Helper to generate the standard branded wrapper
     getBrandedTemplate(content, title = 'Notification') {
-        const logoHtml = this.logoUrl 
+        const logoHtml = this.logoUrl
             ? `<img src="${this.logoUrl}" alt="${this.brandName}" style="max-height: 50px; margin-bottom: 10px;">`
             : `<h1 style="color: #ffffff; margin: 0; font-size: 24px;">${this.brandName}</h1>`;
 
@@ -69,18 +90,53 @@ module.exports = class Email {
             html: html || this.getBrandedTemplate(`<p>${text.replace(/\n/g, '<br>')}</p>`, 'General Notification')
         };
 
-        // 2) Create a transport and send email
-        try {
-            logger.info(`Attempting to send email to ${this.to} with subject: ${subject}`);
-            const info = await this.newTransport().sendMail(mailOptions);
-            logger.info(`Email sent successfully: ${info.messageId}`);
-            if (process.env.EMAIL_HOST === 'smtp.ethereal.email' || process.env.EMAIL_HOST === 'smtp.mailtrap.io') {
-                logger.info(`Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+        // 2) Create a transport and send email with retry logic
+        let lastError;
+        const maxRetries = process.env.NODE_ENV === 'production' ? 2 : 1;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                logger.info(`[Email] Attempt ${attempt}/${maxRetries} - To: ${this.to}, Subject: ${subject}`);
+
+                const transport = this.newTransport();
+                await transport.verify();
+                logger.info(`[Email] SMTP connection verified`);
+
+                const info = await transport.sendMail(mailOptions);
+                logger.info(`[Email] Sent - MessageId: ${info.messageId}`);
+
+                if (process.env.EMAIL_HOST === 'smtp.ethereal.email' || process.env.EMAIL_HOST === 'smtp.mailtrap.io') {
+                    logger.info(`[Email] Preview: ${nodemailer.getTestMessageUrl(info)}`);
+                }
+
+                return info;
+            } catch (error) {
+                lastError = error;
+                logger.error(`[Email] Attempt ${attempt} failed:`, {
+                    error: error.message,
+                    code: error.code,
+                    responseCode: error.responseCode
+                });
+
+                // Don't retry on auth errors
+                if (error.code === 'EAUTH') {
+                    logger.error(`[Email] Auth failed - check credentials`);
+                    break;
+                }
+
+                if (attempt < maxRetries) {
+                    const delay = Math.pow(2, attempt) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
             }
-        } catch (error) {
-            logger.error(`Error sending email to ${this.to}:`, error);
-            throw error;
         }
+
+        // Log development fallback
+        if (process.env.NODE_ENV === 'development') {
+            logger.info(`[Email] DEV FALLBACK - To: ${this.to}, Subject: ${subject}`);
+        }
+
+        throw lastError;
     }
 
     async sendPasswordReset() {
@@ -197,10 +253,10 @@ module.exports = class Email {
 
     async sendTransactionAlert(transaction, account, type = 'Credit') {
         const subject = `${type} Alert: ₦${parseFloat(transaction.amount).toLocaleString()} - SCMS`;
-        
+
         const isCredit = type.toLowerCase() === 'credit';
         const amountStr = `₦${parseFloat(transaction.amount).toLocaleString()}`;
-        
+
         const html = `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #334155; max-width: 500px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background: #ffffff;">
                 <div style="background-color: ${isCredit ? '#10b981' : '#ef4444'}; padding: 30px 20px; text-align: center;">
@@ -239,7 +295,7 @@ module.exports = class Email {
                 </div>
             </div>
         `;
-        
+
         await this.send(subject, `Transaction Alert: ${type} of ${amountStr} on account XXXX${account.accountNumber.slice(-4)}. New Balance: ₦${transaction.balanceAfter}`, html);
     }
 
@@ -271,9 +327,9 @@ module.exports = class Email {
                         <p style="margin: 0; color: #374151;">${remarks}</p>
                     </div>` : ''}
                     ${isApproved
-                        ? '<p>Your loan will proceed to disbursement. Please ensure your bank details are up to date. You will be notified once funds are disbursed.</p>'
-                        : '<p>If you believe this decision was made in error, please contact our support team.</p>'
-                    }
+                ? '<p>Your loan will proceed to disbursement. Please ensure your bank details are up to date. You will be notified once funds are disbursed.</p>'
+                : '<p>If you believe this decision was made in error, please contact our support team.</p>'
+            }
                     <div style="text-align: center; margin: 30px 0;">
                         <a href="${this.url}" style="background-color: ${isApproved ? '#2563eb' : '#64748b'}; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">View My Loans</a>
                     </div>
@@ -337,7 +393,7 @@ module.exports = class Email {
 
     async sendInstitutionWelcome(institution, password) {
         const subject = `🏢 Welcome to SCMS! Institution Account Created: ${institution.name}`;
-        
+
         const html = `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #334155; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background: #ffffff;">
                 <div style="background-color: #2563eb; padding: 30px 20px; text-align: center;">
@@ -423,7 +479,7 @@ module.exports = class Email {
     async sendPlatformAdminWelcome(password) {
         const subject = `🛡️ Platform Access Granted - ${this.brandName}`;
         const url = `${process.env.VITE_CLIENT_URL || 'http://localhost:5173'}/login`;
-        
+
         const html = `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #334155; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background: #ffffff;">
                 <div style="background-color: #006a61; padding: 30px 20px; text-align: center;">

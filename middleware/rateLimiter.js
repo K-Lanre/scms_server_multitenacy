@@ -48,7 +48,19 @@ const strictLimiter = rateLimit({
     skip: (req, res) => process.env.NODE_ENV === 'test'
 });
 
+// Rate limiter specifically for resend verification - max 3 attempts per 10 minutes
+const resendVerificationLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 3, // Limit each IP to 3 resend requests per 10 minutes
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: getStore(),
+    message: { status: 'error', message: 'Too many verification resend requests. Please try again after 10 minutes.' },
+    skip: (req, res) => process.env.NODE_ENV === 'test'
+});
+
 module.exports = {
     apiLimiter,
-    strictLimiter
+    strictLimiter,
+    resendVerificationLimiter
 };
