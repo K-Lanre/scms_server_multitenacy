@@ -82,6 +82,8 @@ module.exports = class Email {
     // Send the actual email
     async send(subject, text, html = null) {
         // 1) Define email options
+        // EMAIL_FROM should be a plain email address (e.g. user@gmail.com).
+        // We wrap it with the brand name here, so do NOT include a display name in EMAIL_FROM.
         const mailOptions = {
             from: `"${this.brandName}" <${this.from}>`,
             to: this.to,
@@ -93,14 +95,12 @@ module.exports = class Email {
         // 2) Create a transport and send email with retry logic
         let lastError;
         const maxRetries = process.env.NODE_ENV === 'production' ? 2 : 1;
+        // Create the transport once (reuse across retries)
+        const transport = this.newTransport();
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 logger.info(`[Email] Attempt ${attempt}/${maxRetries} - To: ${this.to}, Subject: ${subject}`);
-
-                const transport = this.newTransport();
-                await transport.verify();
-                logger.info(`[Email] SMTP connection verified`);
 
                 const info = await transport.sendMail(mailOptions);
                 logger.info(`[Email] Sent - MessageId: ${info.messageId}`);
