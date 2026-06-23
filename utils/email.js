@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const fetch = require('node-fetch');
 const logger = require('../config/logger');
 
 module.exports = class Email {
@@ -79,28 +80,63 @@ module.exports = class Email {
         `;
     }
 
+    // Send via Brevo HTTP API (bypasses SMTP port blocks on Render)
+    async sendViaBrevoApi(subject, text, html) {
+        const apiKey = process.env.BREVO_API_KEY;
+        const payload = {
+            sender: { name: this.brandName, email: this.from },
+            to: [{ email: this.to }],
+            subject,
+            htmlContent: html,
+            textContent: text
+        };
+
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': apiKey,
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.text();
+            throw new Error(`Brevo API error ${response.status}: ${errorBody}`);
+        }
+
+        const result = await response.json();
+        logger.info(`[Email] Sent via Brevo API - MessageId: ${result.messageId}`);
+        return result;
+    }
+
     // Send the actual email
     async send(subject, text, html = null) {
-        // 1) Define email options
-        // EMAIL_FROM should be a plain email address (e.g. user@gmail.com).
-        // We wrap it with the brand name here, so do NOT include a display name in EMAIL_FROM.
+        const htmlContent = html || this.getBrandedTemplate(`<p>${text.replace(/\n/g, '<br>')}</p>`, 'General Notification');
+
+        // Use Brevo HTTP API if API key is set (recommended for production on Render)
+        if (process.env.BREVO_API_KEY) {
+            logger.info(`[Email] Using Brevo HTTP API - To: ${this.to}, Subject: ${subject}`);
+            return await this.sendViaBrevoApi(subject, text, htmlContent);
+        }
+
+        // Fallback: SMTP via nodemailer (for local development)
         const mailOptions = {
             from: `"${this.brandName}" <${this.from}>`,
             to: this.to,
             subject,
             text,
-            html: html || this.getBrandedTemplate(`<p>${text.replace(/\n/g, '<br>')}</p>`, 'General Notification')
+            html: htmlContent
         };
 
-        // 2) Create a transport and send email with retry logic
         let lastError;
         const maxRetries = process.env.NODE_ENV === 'production' ? 2 : 1;
-        // Create the transport once (reuse across retries)
         const transport = this.newTransport();
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                logger.info(`[Email] Attempt ${attempt}/${maxRetries} - To: ${this.to}, Subject: ${subject}`);
+                logger.info(`[Email] SMTP Attempt ${attempt}/${maxRetries} - To: ${this.to}, Subject: ${subject}`);
 
                 const info = await transport.sendMail(mailOptions);
                 logger.info(`[Email] Sent - MessageId: ${info.messageId}`);
@@ -112,13 +148,12 @@ module.exports = class Email {
                 return info;
             } catch (error) {
                 lastError = error;
-                logger.error(`[Email] Attempt ${attempt} failed:`, {
+                logger.error(`[Email] SMTP Attempt ${attempt} failed:`, {
                     error: error.message,
                     code: error.code,
                     responseCode: error.responseCode
                 });
 
-                // Don't retry on auth errors
                 if (error.code === 'EAUTH') {
                     logger.error(`[Email] Auth failed - check credentials`);
                     break;
@@ -131,7 +166,6 @@ module.exports = class Email {
             }
         }
 
-        // Log development fallback
         if (process.env.NODE_ENV === 'development') {
             logger.info(`[Email] DEV FALLBACK - To: ${this.to}, Subject: ${subject}`);
         }
