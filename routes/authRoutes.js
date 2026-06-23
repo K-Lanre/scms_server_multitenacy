@@ -24,6 +24,7 @@ router.patch('/resetPassword/:token', authController.resetPassword);
 router.use(authMiddleware.protect);
 
 router.post('/verify-email', authController.verifyEmail);
+router.post('/cancel-signup', authController.cancelSignup);
 router.post('/resend-verification', resendVerificationLimiter, authController.resendVerification);
 router.patch('/updateMyPassword', authController.updateMyPassword);
 router.get('/profile', authController.profile);

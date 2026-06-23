@@ -54,20 +54,30 @@ exports.signup = catchAsync(async (req, res, next) => {
 
     try {
         // Check if user already exists
-        const existingUser = await User.findOne({ where: { email }, transaction: t });
-        if (existingUser) {
-            await t.rollback();
-            return next(new AppError('A user with this email address already exists.', 400));
+        let newUser = await User.findOne({ where: { email }, transaction: t });
+        
+        if (newUser) {
+            if (newUser.isEmailVerified) {
+                await t.rollback();
+                return next(new AppError('A user with this email address already exists.', 400));
+            }
+            
+            // Overwrite/update existing unverified registration info
+            newUser.name = name;
+            newUser.password = password; // triggers hook to hash
+            newUser.institutionId = institution.id;
+            newUser.role = 'user';
+            newUser.status = 'pending_onboarding';
+        } else {
+            newUser = await User.create({
+                name,
+                email,
+                password,
+                institutionId: institution.id,
+                role: 'user',
+                isEmailVerified: false
+            }, { transaction: t });
         }
-
-        const newUser = await User.create({
-            name,
-            email,
-            password,
-            institutionId: institution.id,
-            role: 'user',
-            isEmailVerified: false
-        }, { transaction: t });
 
         const verificationToken = newUser.createEmailVerificationToken();
         await newUser.save({ validate: false, transaction: t });
@@ -320,3 +330,23 @@ exports.resendVerification = catchAsync(async (req, res, next) => {
         return next(new AppError('Error sending verification email. Please try again later.', 500));
     }
 });
+
+exports.cancelSignup = catchAsync(async (req, res, next) => {
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+        return next(new AppError('User not found', 404));
+    }
+
+    if (user.isEmailVerified) {
+        return next(new AppError('Cannot cancel signup for verified users.', 400));
+    }
+
+    // Delete the unverified user from the database
+    await user.destroy();
+
+    res.status(200).json({
+        status: 'success',
+        message: 'Signup cancelled and unverified user removed successfully.'
+    });
+});
+

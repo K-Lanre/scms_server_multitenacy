@@ -31,6 +31,25 @@ const jobRegistry = {
     'audit-log-archive': async (instId) => {
         console.log(`[Maintenance] Archiving audit logs for Institution #${instId || 'All'}`);
         // TODO: Implement actual archiving logic
+    },
+    'unverified-user-cleanup': async () => {
+        const { Op } = require('sequelize');
+        const { User } = require('../models');
+        console.log('[Maintenance] Running expired unverified user cleanup...');
+        try {
+            const result = await User.destroy({
+                where: {
+                    isEmailVerified: false,
+                    emailVerificationExpires: {
+                        [Op.lt]: new Date()
+                    }
+                }
+            });
+            console.log(`[Maintenance] Cleaned up ${result} expired unverified user records.`);
+        } catch (error) {
+            console.error('[Maintenance] Failed to clean up expired unverified users:', error);
+            throw error;
+        }
     }
 };
 
@@ -42,6 +61,7 @@ const defaultJobs = [
     { jobId: 'thrift-penalties', name: 'Monthly Thrift Penalty', description: 'Applies penalties for unpaid thrift.', cronExpression: '0 5 1 * *', isEnabled: true, isSystem: true, category: 'thrift' },
     { jobId: 'monthly-thrift', name: 'Monthly Thrift Generation', description: 'Generates thrift and commission records for all members.', cronExpression: '0 0 1 * *', isEnabled: true, isSystem: true, category: 'thrift' },
     { jobId: 'thrift-deductions', name: 'Automated Thrift Deductions', description: 'Automatically collects thrift from member savings balance.', cronExpression: '0 1 1 * *', isEnabled: true, isSystem: true, category: 'thrift' },
+    { jobId: 'unverified-user-cleanup', name: 'Unverified User Cleanup', description: 'Deletes unverified user accounts where the verification window has expired.', cronExpression: '0 3 * * *', isEnabled: true, isSystem: true, category: 'maintenance' },
 ];
 
 let activeCronTasks = {};
